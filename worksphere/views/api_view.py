@@ -5,7 +5,9 @@ from django.http import JsonResponse
 from ..models.apikey import APIKey
 import requests
 import json
+from django.views.decorators.csrf import csrf_exempt
 
+@csrf_exempt
 @api_view(['GET', 'POST', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def manage_api_key(request):
@@ -33,6 +35,7 @@ def manage_api_key(request):
         else:
             return Response({'keys': {}})
 
+@csrf_exempt
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_emails(request):
@@ -77,6 +80,7 @@ def get_emails(request):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_email(request):
