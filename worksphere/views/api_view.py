@@ -70,8 +70,7 @@ def auth_callback(request):
     api_key.refresh_token = tokens['refresh_token']
     api_key.save()
 
-    # Redirect to your React frontend
-    return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/emails')
+    return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
