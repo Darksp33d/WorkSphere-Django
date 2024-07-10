@@ -1,4 +1,5 @@
 from rest_framework.decorators import api_view, permission_classes
+from django.contrib.auth.decorators import login_required
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -39,8 +40,12 @@ def manage_api_key(request):
         else:
             return Response({'keys': {}})
 
+@login_required(login_url=None)
 def start_auth(request):
-    api_key = APIKey.objects.get(user=request.user, service='outlook')
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'User not authenticated'}, status=401)
+
+    api_key, created = APIKey.objects.get_or_create(user=request.user, service='outlook')
     auth_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/authorize"
     params = {
         'client_id': api_key.client_id,
@@ -50,9 +55,13 @@ def start_auth(request):
         'response_mode': 'query'
     }
     auth_url += '?' + '&'.join(f"{key}={value}" for key, value in params.items())
-    return redirect(auth_url)
+    return JsonResponse({'auth_url': auth_url})
 
+@login_required(login_url=None)
 def auth_callback(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'User not authenticated'}, status=401)
+
     code = request.GET.get('code')
     api_key = APIKey.objects.get(user=request.user, service='outlook')
     token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
@@ -66,8 +75,8 @@ def auth_callback(request):
     response = requests.post(token_url, data=data)
     tokens = response.json()
     
-    api_key.access_token = tokens['access_token']
-    api_key.refresh_token = tokens['refresh_token']
+    api_key.access_token = tokens.get('access_token')
+    api_key.refresh_token = tokens.get('refresh_token')
     api_key.save()
 
     return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
