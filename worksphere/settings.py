@@ -90,3 +90,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True  # For development only. Configure properly for production.
+CORS_ALLOW_CREDENTIALS = True
+
+# Add these settings for session-based authentication
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin requests
