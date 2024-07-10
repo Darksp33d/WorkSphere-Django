@@ -89,20 +89,31 @@ STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [
-    "https://worksphere-react-2812e798f5dd.herokuapp.com",
-]
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
 }
 
-CORS_ALLOW_ALL_ORIGINS = True  # For development only. Configure properly for production.
+CORS_ALLOWED_ORIGINS = [
+    "https://worksphere-react-2812e798f5dd.herokuapp.com",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
-# Add these settings for session-based authentication
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://worksphere-react-2812e798f5dd.herokuapp.com",
+]
+
+# Ensure these settings are present
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin requests
+SESSION_COOKIE_SAMESITE = 'None'
+
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'None'
+
+CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SAMESITE = 'None'
