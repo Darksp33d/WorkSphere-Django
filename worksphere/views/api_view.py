@@ -2,12 +2,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.http import JsonResponse
+from django.shortcuts import redirect
+from django.urls import reverse
 from ..models.apikey import APIKey
 from ..models.email import Email
 import requests
 import json
 import logging
-from django.views.decorators.csrf import ensure_csrf_cookie
 
 logger = logging.getLogger(__name__)
 
@@ -38,52 +39,75 @@ def manage_api_key(request):
         else:
             return Response({'keys': {}})
 
+def start_auth(request):
+    api_key = APIKey.objects.get(user=request.user, service='outlook')
+    auth_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/authorize"
+    params = {
+        'client_id': api_key.client_id,
+        'response_type': 'code',
+        'redirect_uri': request.build_absolute_uri(reverse('auth_callback')),
+        'scope': 'offline_access Mail.Read',
+        'response_mode': 'query'
+    }
+    auth_url += '?' + '&'.join(f"{key}={value}" for key, value in params.items())
+    return redirect(auth_url)
+
+def auth_callback(request):
+    code = request.GET.get('code')
+    api_key = APIKey.objects.get(user=request.user, service='outlook')
+    token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
+    data = {
+        'client_id': api_key.client_id,
+        'client_secret': api_key.client_secret,
+        'code': code,
+        'redirect_uri': request.build_absolute_uri(reverse('auth_callback')),
+        'grant_type': 'authorization_code'
+    }
+    response = requests.post(token_url, data=data)
+    tokens = response.json()
+    
+    api_key.access_token = tokens['access_token']
+    api_key.refresh_token = tokens['refresh_token']
+    api_key.save()
+
+    return redirect('email_interface')
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_emails(request):
     try:
         api_key = APIKey.objects.get(user=request.user, service='outlook')
-        client_id = api_key.client_id
-        tenant_id = api_key.tenant_id
-        client_secret = api_key.client_secret
-
-        logger.info(f"Fetching emails for user: {request.user.username}")
-        logger.info(f"Using client_id: {client_id}, tenant_id: {tenant_id}")
-
-        token_url = f'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
-        token_data = {
-            'grant_type': 'client_credentials',
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'scope': 'https://graph.microsoft.com/.default',
-        }
-        token_r = requests.post(token_url, data=token_data)
-        logger.info(f"Token response status: {token_r.status_code}")
-        logger.info(f"Token response: {token_r.text}")
         
-        access_token = token_r.json().get('access_token')
-
-        if not access_token:
-            logger.error("Failed to obtain access token")
-            return Response({'error': 'Failed to authenticate with Outlook API'}, status=401)
-
         headers = {
-            'Authorization': f'Bearer {access_token}',
+            'Authorization': f'Bearer {api_key.access_token}',
             'Content-Type': 'application/json'
         }
         response = requests.get(
             'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
             headers=headers
         )
-        logger.info(f"Graph API response status: {response.status_code}")
-        logger.info(f"Graph API response: {response.text}")
+        
+        if response.status_code == 401:
+            # Token expired, refresh it
+            new_tokens = refresh_token(api_key)
+            api_key.access_token = new_tokens['access_token']
+            api_key.refresh_token = new_tokens['refresh_token']
+            api_key.save()
+            # Retry the request with the new token
+            headers['Authorization'] = f'Bearer {api_key.access_token}'
+            response = requests.get(
+                'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
+                headers=headers
+            )
 
+        logger.info(f"Graph API response status: {response.status_code}")
+        
         emails = response.json().get('value', [])
         logger.info(f"Number of emails fetched: {len(emails)}")
 
         formatted_emails = []
         for email in emails:
-            email_obj, created = Email.objects.get_or_create(
+            email_obj, created = Email.objects.update_or_create(
                 user=request.user,
                 email_id=email['id'],
                 defaults={
@@ -110,7 +134,18 @@ def get_emails(request):
     except Exception as e:
         logger.exception(f"Unexpected error occurred: {str(e)}")
         return Response({'error': str(e)}, status=500)
-    
+
+def refresh_token(api_key):
+    token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
+    data = {
+        'client_id': api_key.client_id,
+        'client_secret': api_key.client_secret,
+        'refresh_token': api_key.refresh_token,
+        'grant_type': 'refresh_token'
+    }
+    response = requests.post(token_url, data=data)
+    return response.json()
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_as_read(request):
