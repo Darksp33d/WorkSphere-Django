@@ -59,7 +59,17 @@ def get_emails(request):
             headers=headers
         )
         emails = response.json().get('value', [])
-        return JsonResponse({'emails': emails})
+        formatted_emails = [
+            {
+                'id': email['id'],
+                'sender': email['from']['emailAddress']['name'],
+                'subject': email['subject'],
+                'body': email['body']['content'],
+                'receivedDateTime': email['receivedDateTime'],
+            }
+            for email in emails
+        ]
+        return JsonResponse({'emails': formatted_emails})
     except APIKey.DoesNotExist:
         return JsonResponse({'error': 'Outlook API key not found'}, status=400)
     except Exception as e:
