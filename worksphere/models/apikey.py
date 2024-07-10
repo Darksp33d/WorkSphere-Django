@@ -11,5 +11,5 @@ class APIKey(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = 'worksphere'
         unique_together = ('user', 'service')
+        app_label = 'worksphere'  # Add this line
