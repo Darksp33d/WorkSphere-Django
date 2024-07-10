@@ -45,7 +45,7 @@ def start_auth(request):
     params = {
         'client_id': api_key.client_id,
         'response_type': 'code',
-        'redirect_uri': request.build_absolute_uri(reverse('auth_callback')),
+        'redirect_uri': 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/callback/',
         'scope': 'offline_access Mail.Read',
         'response_mode': 'query'
     }
@@ -60,7 +60,7 @@ def auth_callback(request):
         'client_id': api_key.client_id,
         'client_secret': api_key.client_secret,
         'code': code,
-        'redirect_uri': request.build_absolute_uri(reverse('auth_callback')),
+        'redirect_uri': 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/callback/',
         'grant_type': 'authorization_code'
     }
     response = requests.post(token_url, data=data)
