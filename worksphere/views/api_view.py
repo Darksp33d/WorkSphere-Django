@@ -54,8 +54,8 @@ def start_auth(request):
         'scope': 'offline_access Mail.Read',
         'response_mode': 'query'
     }
-    auth_url += '?' + '&'.join(f"{key}={value}" for key, value in params.items())
-    return JsonResponse({'auth_url': auth_url})
+    full_auth_url = auth_url + '?' + '&'.join(f"{key}={value}" for key, value in params.items())
+    return JsonResponse({'auth_url': full_auth_url})
 
 @login_required(login_url=None)
 def auth_callback(request):
@@ -63,6 +63,9 @@ def auth_callback(request):
         return JsonResponse({'error': 'User not authenticated'}, status=401)
 
     code = request.GET.get('code')
+    if not code:
+        return JsonResponse({'error': 'Authorization code not received'}, status=400)
+
     api_key = APIKey.objects.get(user=request.user, service='outlook')
     token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
     data = {
@@ -75,11 +78,13 @@ def auth_callback(request):
     response = requests.post(token_url, data=data)
     tokens = response.json()
     
-    api_key.access_token = tokens.get('access_token')
-    api_key.refresh_token = tokens.get('refresh_token')
-    api_key.save()
-
-    return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
+    if 'access_token' in tokens and 'refresh_token' in tokens:
+        api_key.access_token = tokens['access_token']
+        api_key.refresh_token = tokens['refresh_token']
+        api_key.save()
+        return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
+    else:
+        return JsonResponse({'error': 'Failed to obtain tokens'}, status=400)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
