@@ -6,6 +6,7 @@ from ..models.apikey import APIKey
 import requests
 import json
 import logging
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 logger = logging.getLogger(__name__)
 
@@ -81,10 +82,10 @@ def get_emails(request):
         return Response({'error': str(e)}, status=500)
 
 @api_view(['POST'])
+@ensure_csrf_cookie
 @permission_classes([IsAuthenticated])
 def send_email(request):
     try:
-        # Log the incoming request data
         logger.info(f"Received email send request: {request.data}")
 
         api_key = APIKey.objects.get(user=request.user, service='outlook')
@@ -137,7 +138,8 @@ def send_email(request):
                         }
                     }
                 ]
-            }
+            },
+            'saveToSentItems': "false"
         }
 
         # Send email
