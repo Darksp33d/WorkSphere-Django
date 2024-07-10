@@ -7,6 +7,7 @@ from ..models.outlook_auth import OutlookAuth
 import requests
 import logging
 from worksphere import settings
+from django.views.decorators.csrf import csrf_exempt
 
 logger = logging.getLogger(__name__)
 
