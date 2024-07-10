@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'worksphere',
 ]
 
 MIDDLEWARE = [
@@ -55,7 +56,7 @@ WSGI_APPLICATION = 'worksphere.wsgi.application'
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='postgres://ubv5u9ggti8mvj:p28683b11c01f635ca4491865cb3120def8332deedc1df53b1a83a51fb8d14226@caij57unh724n3.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d62gqsukttgkqg'
+        default=os.environ.get('DATABASE_URL')
     )
 }
 
