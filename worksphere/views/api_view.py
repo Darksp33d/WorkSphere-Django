@@ -3,6 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.http import JsonResponse
 from ..models.apikey import APIKey
+from ..models.email import Email
 import requests
 import json
 import logging
@@ -46,6 +47,9 @@ def get_emails(request):
         tenant_id = api_key.tenant_id
         client_secret = api_key.client_secret
 
+        logger.info(f"Fetching emails for user: {request.user.username}")
+        logger.info(f"Using client_id: {client_id}, tenant_id: {tenant_id}")
+
         token_url = f'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
         token_data = {
             'grant_type': 'client_credentials',
@@ -54,7 +58,14 @@ def get_emails(request):
             'scope': 'https://graph.microsoft.com/.default',
         }
         token_r = requests.post(token_url, data=token_data)
+        logger.info(f"Token response status: {token_r.status_code}")
+        logger.info(f"Token response: {token_r.text}")
+        
         access_token = token_r.json().get('access_token')
+
+        if not access_token:
+            logger.error("Failed to obtain access token")
+            return Response({'error': 'Failed to authenticate with Outlook API'}, status=401)
 
         headers = {
             'Authorization': f'Bearer {access_token}',
@@ -64,7 +75,12 @@ def get_emails(request):
             'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
             headers=headers
         )
+        logger.info(f"Graph API response status: {response.status_code}")
+        logger.info(f"Graph API response: {response.text}")
+
         emails = response.json().get('value', [])
+        logger.info(f"Number of emails fetched: {len(emails)}")
+
         formatted_emails = []
         for email in emails:
             email_obj, created = Email.objects.get_or_create(
@@ -86,13 +102,15 @@ def get_emails(request):
                 'receivedDateTime': email_obj.received_date_time,
                 'isRead': email_obj.is_read
             })
+        logger.info(f"Number of formatted emails: {len(formatted_emails)}")
         return Response({'emails': formatted_emails})
     except APIKey.DoesNotExist:
+        logger.error("Outlook API key not found for user")
         return Response({'error': 'Outlook API key not found'}, status=400)
     except Exception as e:
         logger.exception(f"Unexpected error occurred: {str(e)}")
         return Response({'error': str(e)}, status=500)
-
+    
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_as_read(request):
