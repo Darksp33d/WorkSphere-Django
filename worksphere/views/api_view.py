@@ -7,7 +7,6 @@ from ..models.outlook_auth import OutlookAuth
 import requests
 import logging
 from worksphere import settings
-from django.views.decorators.csrf import csrf_exempt
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,6 @@ def get_emails(request):
     else:
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_email(request):
@@ -130,7 +128,6 @@ def send_email(request):
     except OutlookAuth.DoesNotExist:
         return Response({'error': 'Outlook not connected'}, status=401)
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def delete_email(request):
@@ -148,7 +145,6 @@ def delete_email(request):
     except OutlookAuth.DoesNotExist:
         return Response({'error': 'Outlook not connected'}, status=401)
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_email_read(request):
