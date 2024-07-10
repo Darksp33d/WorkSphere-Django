@@ -141,11 +141,15 @@ def send_email(request):
             logger.info("Email sent successfully.")
             return Response({'status': 'Email sent successfully'})
         else:
-            logger.error(f"Failed to send email with status {response.status_code}")
-            return Response({'error': 'Failed to send email'}, status=response.status_code)
+            logger.error(f"Failed to send email with status {response.status_code}: {response.text}")
+            return Response({'error': 'Failed to send email', 'details': response.text}, status=response.status_code)
     except OutlookAuth.DoesNotExist:
         logger.warning("User's Outlook account is not connected.")
         return Response({'error': 'Outlook not connected'}, status=401)
+    except Exception as e:
+        logger.error(f"Exception occurred while sending email: {str(e)}")
+        return Response({'error': 'Failed to send email', 'details': str(e)}, status=500)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -157,17 +161,22 @@ def delete_email(request):
             'Authorization': f'Bearer {auth.access_token}',
         }
         email_id = request.data.get('email_id')
+        logger.debug(f"Deleting email with ID: {email_id}")
         response = requests.delete(f"{GRAPH_API_BASE}/messages/{email_id}", headers=headers)
         logger.debug(f"Email delete response: {response.status_code} {response.text}")
         if response.status_code == 204:
             logger.info("Email deleted successfully.")
             return Response({'status': 'Email deleted successfully'})
         else:
-            logger.error(f"Failed to delete email with status {response.status_code}")
-            return Response({'error': 'Failed to delete email'}, status=response.status_code)
+            logger.error(f"Failed to delete email with status {response.status_code}: {response.text}")
+            return Response({'error': 'Failed to delete email', 'details': response.text}, status=response.status_code)
     except OutlookAuth.DoesNotExist:
         logger.warning("User's Outlook account is not connected.")
         return Response({'error': 'Outlook not connected'}, status=401)
+    except Exception as e:
+        logger.error(f"Exception occurred while deleting email: {str(e)}")
+        return Response({'error': 'Failed to delete email', 'details': str(e)}, status=500)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -184,17 +193,21 @@ def mark_email_read(request):
         data = {
             "isRead": is_read
         }
+        logger.debug(f"Marking email with ID: {email_id} as {'read' if is_read else 'unread'}")
         response = requests.patch(f"{GRAPH_API_BASE}/messages/{email_id}", headers=headers, json=data)
         logger.debug(f"Mark read response: {response.status_code} {response.text}")
         if response.status_code == 200:
             logger.info("Email marked as read/unread successfully.")
             return Response({'status': 'Email marked as read/unread successfully'})
         else:
-            logger.error(f"Failed to mark email as read/unread with status {response.status_code}")
-            return Response({'error': 'Failed to mark email as read/unread'}, status=response.status_code)
+            logger.error(f"Failed to mark email as read/unread with status {response.status_code}: {response.text}")
+            return Response({'error': 'Failed to mark email as read/unread', 'details': response.text}, status=response.status_code)
     except OutlookAuth.DoesNotExist:
         logger.warning("User's Outlook account is not connected.")
         return Response({'error': 'Outlook not connected'}, status=401)
+    except Exception as e:
+        logger.error(f"Exception occurred while marking email as read/unread: {str(e)}")
+        return Response({'error': 'Failed to mark email as read/unread', 'details': str(e)}, status=500)
 
 def refresh_token(auth):
     logger.info("Refreshing access token.")
