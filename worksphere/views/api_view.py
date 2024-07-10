@@ -6,6 +6,7 @@ from django.conf import settings
 from ..models.outlook_auth import OutlookAuth
 import requests
 import logging
+from worksphere import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,13 @@ def outlook_auth_callback(request):
     }
 
     response = requests.post(OUTLOOK_TOKEN_URL, data=data)
-    tokens = response.json()
+    
+    if response.status_code != 200:
+        logger.error(f"Token request failed with status {response.status_code}: {response.text}")
+        return Response({'error': 'Failed to obtain tokens', 'details': response.text}, status=response.status_code)
 
+    tokens = response.json()
+    
     if 'access_token' in tokens and 'refresh_token' in tokens:
         OutlookAuth.objects.update_or_create(
             user=request.user,
@@ -47,7 +53,9 @@ def outlook_auth_callback(request):
         )
         return redirect('/email')  # Redirect to your email interface
     else:
-        return Response({'error': 'Failed to obtain tokens'}, status=400)
+        logger.error(f"Token response missing tokens: {tokens}")
+        return Response({'error': 'Failed to obtain tokens', 'details': tokens}, status=400)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
