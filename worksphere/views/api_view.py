@@ -59,6 +59,7 @@ def start_auth(request):
 
 @login_required(login_url=None)
 def auth_callback(request):
+    logger.info(f"Auth callback received for user: {request.user.username}")
     if not request.user.is_authenticated:
         logger.error("User not authenticated in auth_callback")
         return JsonResponse({'error': 'User not authenticated'}, status=401)
@@ -68,29 +69,38 @@ def auth_callback(request):
         logger.error("Authorization code not received in auth_callback")
         return JsonResponse({'error': 'Authorization code not received'}, status=400)
 
-    api_key = APIKey.objects.get(user=request.user, service='outlook')
-    token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
-    data = {
-        'client_id': api_key.client_id,
-        'client_secret': api_key.client_secret,
-        'code': code,
-        'redirect_uri': 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/callback/',
-        'grant_type': 'authorization_code'
-    }
-    response = requests.post(token_url, data=data)
-    tokens = response.json()
+    try:
+        api_key = APIKey.objects.get(user=request.user, service='outlook')
+        logger.info(f"API key retrieved for user: {request.user.username}")
+        
+        token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
+        data = {
+            'client_id': api_key.client_id,
+            'client_secret': api_key.client_secret,
+            'code': code,
+            'redirect_uri': 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/callback/',
+            'grant_type': 'authorization_code'
+        }
+        response = requests.post(token_url, data=data)
+        logger.info(f"Token exchange response status: {response.status_code}")
+        
+        tokens = response.json()
+        if 'access_token' in tokens and 'refresh_token' in tokens:
+            api_key.access_token = tokens['access_token']
+            api_key.refresh_token = tokens['refresh_token']
+            api_key.save()
+            logger.info(f"Tokens successfully saved for user: {request.user.username}")
+            return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
+        else:
+            logger.error(f"Failed to obtain tokens. Response: {tokens}")
+            return JsonResponse({'error': 'Failed to obtain tokens'}, status=400)
+    except APIKey.DoesNotExist:
+        logger.error(f"API key not found for user: {request.user.username}")
+        return JsonResponse({'error': 'API key not found'}, status=400)
+    except Exception as e:
+        logger.exception(f"Unexpected error in auth_callback: {str(e)}")
+        return JsonResponse({'error': 'Unexpected error occurred'}, status=500)
     
-    logger.info(f"Token exchange response status: {response.status_code}")
-    if 'access_token' in tokens and 'refresh_token' in tokens:
-        api_key.access_token = tokens['access_token']
-        api_key.refresh_token = tokens['refresh_token']
-        api_key.save()
-        logger.info(f"Tokens successfully saved for user: {request.user.username}")
-        return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')
-    else:
-        logger.error(f"Failed to obtain tokens. Response: {tokens}")
-        return JsonResponse({'error': 'Failed to obtain tokens'}, status=400)
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_emails(request):
@@ -110,51 +120,30 @@ def get_emails(request):
         )
         
         logger.info(f"Graph API response status: {response.status_code}")
-        logger.info(f"Graph API response content: {response.content[:200]}...")  # Log first 200 characters
+        logger.info(f"Graph API response content: {response.text[:200]}...")  # Log first 200 characters
         
         if response.status_code == 401:
             logger.warning("Received 401 from Graph API, attempting to refresh token")
-   
-            # Token expired, refresh it
             new_tokens = refresh_token(api_key)
-            api_key.access_token = new_tokens['access_token']
-            api_key.refresh_token = new_tokens['refresh_token']
-            api_key.save()
-            # Retry the request with the new token
-            headers['Authorization'] = f'Bearer {api_key.access_token}'
-            response = requests.get(
-                'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
-                headers=headers
-            )
-
-        logger.info(f"Graph API response status: {response.status_code}")
+            if new_tokens:
+                headers['Authorization'] = f'Bearer {new_tokens["access_token"]}'
+                response = requests.get(
+                    'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
+                    headers=headers
+                )
+                logger.info(f"Graph API response after token refresh: {response.status_code}")
+            else:
+                logger.error("Failed to refresh token")
+                return Response({'error': 'Failed to refresh token'}, status=401)
         
-        emails = response.json().get('value', [])
-        logger.info(f"Number of emails fetched: {len(emails)}")
-
-        formatted_emails = []
-        for email in emails:
-            email_obj, created = Email.objects.update_or_create(
-                user=request.user,
-                email_id=email['id'],
-                defaults={
-                    'sender': email['from']['emailAddress']['name'],
-                    'subject': email['subject'],
-                    'body': email['body']['content'],
-                    'received_date_time': email['receivedDateTime'],
-                    'is_read': email['isRead']
-                }
-            )
-            formatted_emails.append({
-                'id': email_obj.email_id,
-                'sender': email_obj.sender,
-                'subject': email_obj.subject,
-                'body': email_obj.body,
-                'receivedDateTime': email_obj.received_date_time,
-                'isRead': email_obj.is_read
-            })
-        logger.info(f"Number of formatted emails: {len(formatted_emails)}")
-        return Response({'emails': formatted_emails})
+        if response.status_code == 200:
+            emails = response.json().get('value', [])
+            logger.info(f"Number of emails fetched: {len(emails)}")
+            return Response({'emails': emails})
+        else:
+            logger.error(f"Failed to fetch emails. Status code: {response.status_code}")
+            return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
+        
     except APIKey.DoesNotExist:
         logger.error(f"Outlook API key not found for user: {request.user.username}")
         return Response({'error': 'Outlook API key not found'}, status=400)
@@ -163,6 +152,7 @@ def get_emails(request):
         return Response({'error': str(e)}, status=500)
 
 def refresh_token(api_key):
+    logger.info(f"Attempting to refresh token for user: {api_key.user.username}")
     token_url = f"https://login.microsoftonline.com/{api_key.tenant_id}/oauth2/v2.0/token"
     data = {
         'client_id': api_key.client_id,
@@ -171,8 +161,20 @@ def refresh_token(api_key):
         'grant_type': 'refresh_token'
     }
     response = requests.post(token_url, data=data)
-    return response.json()
-
+    logger.info(f"Token refresh response status: {response.status_code}")
+    
+    if response.status_code == 200:
+        tokens = response.json()
+        api_key.access_token = tokens['access_token']
+        if 'refresh_token' in tokens:
+            api_key.refresh_token = tokens['refresh_token']
+        api_key.save()
+        logger.info("Token refreshed successfully")
+        return tokens
+    else:
+        logger.error(f"Failed to refresh token. Response: {response.text}")
+        return None
+    
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_as_read(request):
