@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from worksphere.views import test, hello_world
+from worksphere.views.hello_world import hello_world
 
 urlpatterns = [
     path('admin/', admin.site.urls),
