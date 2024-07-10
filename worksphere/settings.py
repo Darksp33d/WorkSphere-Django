@@ -91,6 +91,12 @@ CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
 ]
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
+
 CORS_ALLOW_ALL_ORIGINS = True  # For development only. Configure properly for production.
 CORS_ALLOW_CREDENTIALS = True
 
