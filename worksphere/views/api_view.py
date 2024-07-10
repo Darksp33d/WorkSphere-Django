@@ -12,8 +12,9 @@ logger = logging.getLogger(__name__)
 
 OUTLOOK_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 OUTLOOK_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-OUTLOOK_SCOPE = 'offline_access Mail.Read'
+OUTLOOK_SCOPE = 'offline_access Mail.ReadWrite Mail.Send'
 REDIRECT_URI = 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/outlook/callback/'
+GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0/me'
 
 @api_view(['GET'])
 def start_outlook_auth(request):
@@ -51,7 +52,7 @@ def outlook_auth_callback(request):
                 'expires_in': tokens['expires_in']
             }
         )
-        return redirect('/email')  # Redirect to your email interface
+        return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/email')  # Redirect to your email interface
     else:
         logger.error(f"Token response missing tokens: {tokens}")
         return Response({'error': 'Failed to obtain tokens', 'details': tokens}, status=400)
@@ -92,6 +93,79 @@ def get_emails(request):
         return Response({'emails': emails})
     else:
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_email(request):
+    try:
+        auth = OutlookAuth.objects.get(user=request.user)
+        headers = {
+            'Authorization': f'Bearer {auth.access_token}',
+            'Content-Type': 'application/json'
+        }
+        data = {
+            "message": {
+                "subject": request.data.get('subject'),
+                "body": {
+                    "contentType": "HTML",
+                    "content": request.data.get('body')
+                },
+                "toRecipients": [
+                    {
+                        "emailAddress": {
+                            "address": request.data.get('to')
+                        }
+                    }
+                ]
+            },
+            "saveToSentItems": "true"
+        }
+        response = requests.post(f"{GRAPH_API_BASE}/sendMail", headers=headers, json=data)
+        if response.status_code == 202:
+            return Response({'status': 'Email sent successfully'})
+        else:
+            return Response({'error': 'Failed to send email'}, status=response.status_code)
+    except OutlookAuth.DoesNotExist:
+        return Response({'error': 'Outlook not connected'}, status=401)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def delete_email(request):
+    try:
+        auth = OutlookAuth.objects.get(user=request.user)
+        headers = {
+            'Authorization': f'Bearer {auth.access_token}',
+        }
+        email_id = request.data.get('email_id')
+        response = requests.delete(f"{GRAPH_API_BASE}/messages/{email_id}", headers=headers)
+        if response.status_code == 204:
+            return Response({'status': 'Email deleted successfully'})
+        else:
+            return Response({'error': 'Failed to delete email'}, status=response.status_code)
+    except OutlookAuth.DoesNotExist:
+        return Response({'error': 'Outlook not connected'}, status=401)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_email_read(request):
+    try:
+        auth = OutlookAuth.objects.get(user=request.user)
+        headers = {
+            'Authorization': f'Bearer {auth.access_token}',
+            'Content-Type': 'application/json'
+        }
+        email_id = request.data.get('email_id')
+        is_read = request.data.get('is_read', True)
+        data = {
+            "isRead": is_read
+        }
+        response = requests.patch(f"{GRAPH_API_BASE}/messages/{email_id}", headers=headers, json=data)
+        if response.status_code == 200:
+            return Response({'status': 'Email marked as read/unread successfully'})
+        else:
+            return Response({'error': 'Failed to mark email as read/unread'}, status=response.status_code)
+    except OutlookAuth.DoesNotExist:
+        return Response({'error': 'Outlook not connected'}, status=401)
 
 def refresh_token(auth):
     data = {
