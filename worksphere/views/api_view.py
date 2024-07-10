@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 OUTLOOK_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 OUTLOOK_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
 OUTLOOK_SCOPE = 'offline_access Mail.Read'
-REDIRECT_URI = 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/outlook/callback'
+REDIRECT_URI = 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/outlook/callback/'
 
 @api_view(['GET'])
 def start_outlook_auth(request):
