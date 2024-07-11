@@ -7,6 +7,8 @@ from ..models.outlook_auth import OutlookAuth
 from ..models.email import Email
 import requests
 import logging
+from django.utils.timezone import make_aware
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
