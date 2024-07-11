@@ -124,15 +124,15 @@ def get_emails(request):
 
     if response.status_code == 200:
         emails = response.json().get('value', [])
-        # Save emails to database and include read/unread status
         for email_data in emails:
+            email_id = email_data.get('id')
             sender_email = email_data.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
             subject = email_data.get('subject') or '(No subject)'
             body_content = email_data.get('body', {}).get('content', '')
             received_date_time = email_data.get('receivedDateTime')
 
-            email, created = Email.objects.update_or_create(
-                email_id=email_data['id'],
+            Email.objects.update_or_create(
+                email_id=email_id,
                 defaults={
                     'user': request.user,
                     'sender': sender_email,
@@ -143,7 +143,6 @@ def get_emails(request):
                 }
             )
         logger.info("Emails fetched successfully.")
-        # Return emails with read/unread status from the database
         emails = Email.objects.filter(user=request.user).values()
         return Response({'emails': list(emails)})
     else:
@@ -154,18 +153,17 @@ def get_emails(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_email_read(request):
-    logger.info("Marking email as read/unread.")
     email_id = request.data.get('email_id')
     is_read = request.data.get('is_read', True)
     try:
         email = Email.objects.get(email_id=email_id, user=request.user)
         email.is_read = is_read
         email.save()
-        logger.info(f"Email with ID: {email_id} marked as {'read' if is_read else 'unread'}.")
         return Response({'status': 'Email marked as read/unread successfully'})
     except Email.DoesNotExist:
-        logger.error(f"Email with ID: {email_id} not found.")
+        logger.warning(f"Email with ID: {email_id} not found.")
         return Response({'error': 'Email not found'}, status=404)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
