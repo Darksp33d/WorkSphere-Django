@@ -30,7 +30,7 @@ def slack_auth_callback(request):
             user=request.user,
             defaults={'access_token': data['access_token']}
         )
-        return redirect('https://your-frontend-url/settings')
+        return redirect('https://worksphere-react-2812e798f5dd.herokuapp.com/settings')
     return Response({'error': 'Slack authentication failed'}, status=400)
 
 @api_view(['GET'])
