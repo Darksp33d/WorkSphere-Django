@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 OUTLOOK_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 OUTLOOK_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-OUTLOOK_SCOPE = 'offline_access Mail.ReadWrite Mail.Send'
+OUTLOOK_SCOPE = 'offline_access Mail.Read'
 REDIRECT_URI = 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/outlook/callback/'
 GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0/me'
 
@@ -38,23 +38,6 @@ def refresh_token(auth):
     else:
         logger.error(f"Failed to refresh token. Response: {response.text}")
         return None
-
-def handle_graph_api_request(request_func, auth, *args, **kwargs):
-    try:
-        response = request_func(*args, **kwargs)
-        if response.status_code == 401:
-            logger.info("Access token expired, attempting to refresh.")
-            new_tokens = refresh_token(auth)
-            if new_tokens:
-                kwargs['headers']['Authorization'] = f"Bearer {new_tokens['access_token']}"
-                response = request_func(*args, **kwargs)
-            else:
-                logger.error("Failed to refresh token.")
-                return Response({'error': 'Failed to refresh token'}, status=401)
-        return response
-    except requests.RequestException as e:
-        logger.error(f"Request to Graph API failed: {str(e)}")
-        return Response({'error': 'Failed to communicate with Outlook API'}, status=500)
 
 @api_view(['GET'])
 def start_outlook_auth(request):
@@ -120,15 +103,24 @@ def get_emails(request):
         'Content-Type': 'application/json'
     }
 
-    response = handle_graph_api_request(
-        requests.get,
-        auth,
+    response = requests.get(
         'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
         headers=headers
     )
+    logger.debug(f"Email fetch response: {response.status_code} {response.text}")
 
-    if isinstance(response, Response):
-        return response
+    if response.status_code == 401:
+        logger.info("Access token expired, attempting to refresh token.")
+        new_tokens = refresh_token(auth)
+        if new_tokens:
+            headers['Authorization'] = f'Bearer {new_tokens["access_token"]}'
+            response = requests.get(
+                'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
+                headers=headers
+            )
+        else:
+            logger.error("Failed to refresh token.")
+            return Response({'error': 'Failed to refresh token'}, status=401)
 
     if response.status_code == 200:
         emails = response.json().get('value', [])
@@ -137,126 +129,3 @@ def get_emails(request):
     else:
         logger.error(f"Failed to fetch emails with status {response.status_code}")
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def send_email(request):
-    logger.info("Sending email.")
-    try:
-        auth = OutlookAuth.objects.get(user=request.user)
-        headers = {
-            'Authorization': f'Bearer {auth.access_token}',
-            'Content-Type': 'application/json'
-        }
-        data = {
-            "message": {
-                "subject": request.data.get('subject'),
-                "body": {
-                    "contentType": "HTML",
-                    "content": request.data.get('body')
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": request.data.get('to')
-                        }
-                    }
-                ]
-            },
-            "saveToSentItems": "true"
-        }
-        logger.debug(f"Email data: {data}")
-        response = handle_graph_api_request(
-            requests.post,
-            auth,
-            f"{GRAPH_API_BASE}/sendMail",
-            headers=headers,
-            json=data
-        )
-        if isinstance(response, Response):
-            return response
-        logger.debug(f"Email send response: {response.status_code} {response.text}")
-        if response.status_code == 202:
-            logger.info("Email sent successfully.")
-            return Response({'status': 'Email sent successfully'})
-        else:
-            logger.error(f"Failed to send email with status {response.status_code}: {response.text}")
-            return Response({'error': 'Failed to send email', 'details': response.text}, status=response.status_code)
-    except OutlookAuth.DoesNotExist:
-        logger.warning("User's Outlook account is not connected.")
-        return Response({'error': 'Outlook not connected'}, status=401)
-    except Exception as e:
-        logger.error(f"Exception occurred while sending email: {str(e)}")
-        return Response({'error': 'Failed to send email', 'details': str(e)}, status=500)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def delete_email(request):
-    logger.info("Deleting email.")
-    try:
-        auth = OutlookAuth.objects.get(user=request.user)
-        headers = {
-            'Authorization': f'Bearer {auth.access_token}',
-        }
-        email_id = request.data.get('email_id')
-        logger.debug(f"Deleting email with ID: {email_id}")
-        response = handle_graph_api_request(
-            requests.delete,
-            auth,
-            f"{GRAPH_API_BASE}/messages/{email_id}",
-            headers=headers
-        )
-        if isinstance(response, Response):
-            return response
-        logger.debug(f"Email delete response: {response.status_code} {response.text}")
-        if response.status_code == 204:
-            logger.info("Email deleted successfully.")
-            return Response({'status': 'Email deleted successfully'})
-        else:
-            logger.error(f"Failed to delete email with status {response.status_code}: {response.text}")
-            return Response({'error': 'Failed to delete email', 'details': response.text}, status=response.status_code)
-    except OutlookAuth.DoesNotExist:
-        logger.warning("User's Outlook account is not connected.")
-        return Response({'error': 'Outlook not connected'}, status=401)
-    except Exception as e:
-        logger.error(f"Exception occurred while deleting email: {str(e)}")
-        return Response({'error': 'Failed to delete email', 'details': str(e)}, status=500)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def mark_email_read(request):
-    logger.info("Marking email as read/unread.")
-    try:
-        auth = OutlookAuth.objects.get(user=request.user)
-        headers = {
-            'Authorization': f'Bearer {auth.access_token}',
-            'Content-Type': 'application/json'
-        }
-        email_id = request.data.get('email_id')
-        is_read = request.data.get('is_read', True)
-        data = {
-            "isRead": is_read
-        }
-        logger.debug(f"Marking email with ID: {email_id} as {'read' if is_read else 'unread'}")
-        response = handle_graph_api_request(
-            requests.patch,
-            auth,
-            f"{GRAPH_API_BASE}/messages/{email_id}",
-            headers=headers,
-            json=data
-        )
-        if isinstance(response, Response):
-            return response
-        logger.debug(f"Mark read response: {response.status_code} {response.text}")
-        if response.status_code == 200:
-            logger.info("Email marked as read/unread successfully.")
-            return Response({'status': 'Email marked as read/unread successfully'})
-        else:
-            logger.error(f"Failed to mark email as read/unread with status {response.status_code}: {response.text}")
-            return Response({'error': 'Failed to mark email as read/unread', 'details': response.text}, status=response.status_code)
-    except OutlookAuth.DoesNotExist:
-        logger.warning("User's Outlook account is not connected.")
-        return Response({'error': 'Outlook not connected'}, status=401)
-    except Exception as e:
-        logger.error(f"Exception occurred while marking email as read/unread: {str(e)}")
-        return Response({'error': 'Failed to mark email as read/unread', 'details': str(e)}, status=500)
