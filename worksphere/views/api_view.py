@@ -4,15 +4,15 @@ from rest_framework.response import Response
 from django.shortcuts import redirect
 from django.conf import settings
 from ..models.outlook_auth import OutlookAuth
+from ..models.email import Email
 import requests
 import logging
-from worksphere import settings
 
 logger = logging.getLogger(__name__)
 
 OUTLOOK_AUTH_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize'
 OUTLOOK_TOKEN_URL = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
-OUTLOOK_SCOPE = 'offline_access Mail.Read'
+OUTLOOK_SCOPE = 'offline_access Mail.ReadWrite Mail.Send'
 REDIRECT_URI = 'https://worksphere-django-c79ad3982526.herokuapp.com/auth/outlook/callback/'
 GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0/me'
 
@@ -124,8 +124,49 @@ def get_emails(request):
 
     if response.status_code == 200:
         emails = response.json().get('value', [])
+        # Save emails to database and include read/unread status
+        for email_data in emails:
+            email, created = Email.objects.update_or_create(
+                email_id=email_data['id'],
+                defaults={
+                    'user': request.user,
+                    'sender': email_data['from']['emailAddress']['address'],
+                    'subject': email_data['subject'],
+                    'body': email_data['body']['content'],
+                    'received_date_time': email_data['receivedDateTime'],
+                    'is_read': email_data.get('isRead', False)
+                }
+            )
         logger.info("Emails fetched successfully.")
-        return Response({'emails': emails})
+        # Return emails with read/unread status from the database
+        emails = Email.objects.filter(user=request.user).values()
+        return Response({'emails': list(emails)})
     else:
         logger.error(f"Failed to fetch emails with status {response.status_code}")
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_email_read(request):
+    logger.info("Marking email as read/unread.")
+    email_id = request.data.get('email_id')
+    is_read = request.data.get('is_read', True)
+    try:
+        email = Email.objects.get(email_id=email_id, user=request.user)
+        email.is_read = is_read
+        email.save()
+        logger.info(f"Email with ID: {email_id} marked as {'read' if is_read else 'unread'}.")
+        return Response({'status': 'Email marked as read/unread successfully'})
+    except Email.DoesNotExist:
+        logger.error(f"Email with ID: {email_id} not found.")
+        return Response({'error': 'Email not found'}, status=404)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_outlook_connection(request):
+    logger.info("Checking if user's Outlook account is connected.")
+    try:
+        auth = OutlookAuth.objects.get(user=request.user)
+        return Response({'connected': True})
+    except OutlookAuth.DoesNotExist:
+        return Response({'connected': False})
