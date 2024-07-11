@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import User
+from ..models.user import CustomUser as User
 
 class Email(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='outlook_emails')

@@ -7,16 +7,16 @@ class Message(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
-
+    
 class Group(models.Model):
     name = models.CharField(max_length=100)
-    members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='groups')
+    members = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='user_groups')
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='created_groups', on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
         return self.name
-    
+
 class GroupMessage(models.Model):
     group = models.ForeignKey(Group, related_name='messages', on_delete=models.CASCADE)
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='group_messages', on_delete=models.CASCADE)
@@ -25,7 +25,7 @@ class GroupMessage(models.Model):
     is_read = models.BooleanField(default=False)
 
 class Contact(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='contacts', on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='user_contacts', on_delete=models.CASCADE)
     contact = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='contact_of', on_delete=models.CASCADE)
     added_at = models.DateTimeField(auto_now_add=True)
 
