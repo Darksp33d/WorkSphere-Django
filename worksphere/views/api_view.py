@@ -104,7 +104,7 @@ def get_emails(request):
     }
 
     response = requests.get(
-        'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
+        f'{GRAPH_API_BASE}/messages?$top=50&$orderby=receivedDateTime DESC',
         headers=headers
     )
     logger.debug(f"Email fetch response: {response.status_code} {response.text}")
@@ -115,7 +115,7 @@ def get_emails(request):
         if new_tokens:
             headers['Authorization'] = f'Bearer {new_tokens["access_token"]}'
             response = requests.get(
-                'https://graph.microsoft.com/v1.0/me/messages?$top=50&$orderby=receivedDateTime DESC',
+                f'{GRAPH_API_BASE}/messages?$top=50&$orderby=receivedDateTime DESC',
                 headers=headers
             )
         else:
@@ -123,15 +123,16 @@ def get_emails(request):
             return Response({'error': 'Failed to refresh token'}, status=401)
 
     if response.status_code == 200:
-        emails = response.json().get('value', [])
-        for email_data in emails:
+        emails_data = response.json().get('value', [])
+        emails = []
+        for email_data in emails_data:
             email_id = email_data.get('id')
             sender_email = email_data.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
             subject = email_data.get('subject') or '(No subject)'
             body_content = email_data.get('body', {}).get('content', '')
-            received_date_time = email_data.get('receivedDateTime')
+            received_date_time = make_aware(datetime.strptime(email_data.get('receivedDateTime'), "%Y-%m-%dT%H:%M:%SZ"))
 
-            Email.objects.update_or_create(
+            email, created = Email.objects.update_or_create(
                 email_id=email_id,
                 defaults={
                     'user': request.user,
@@ -139,16 +140,22 @@ def get_emails(request):
                     'subject': subject,
                     'body': body_content,
                     'received_date_time': received_date_time,
-                    'is_read': email_data.get('isRead', False)
+                    'is_read': False if created else Email.objects.get(email_id=email_id).is_read
                 }
             )
+            emails.append({
+                'email_id': email.email_id,
+                'sender': email.sender,
+                'subject': email.subject,
+                'body': email.body,
+                'received_date_time': email.received_date_time.isoformat(),
+                'is_read': email.is_read
+            })
         logger.info("Emails fetched successfully.")
-        emails = Email.objects.filter(user=request.user).values()
-        return Response({'emails': list(emails)})
+        return Response({'emails': emails})
     else:
         logger.error(f"Failed to fetch emails with status {response.status_code}")
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -159,18 +166,35 @@ def mark_email_read(request):
         email = Email.objects.get(email_id=email_id, user=request.user)
         email.is_read = is_read
         email.save()
+        logger.info(f"Email {email_id} marked as {'read' if is_read else 'unread'} successfully.")
         return Response({'status': 'Email marked as read/unread successfully'})
     except Email.DoesNotExist:
         logger.warning(f"Email with ID: {email_id} not found.")
         return Response({'error': 'Email not found'}, status=404)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_outlook_connection(request):
     logger.info("Checking if user's Outlook account is connected.")
     try:
-        auth = OutlookAuth.objects.get(user=request.user)
+        OutlookAuth.objects.get(user=request.user)
         return Response({'connected': True})
     except OutlookAuth.DoesNotExist:
         return Response({'connected': False})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_unread_emails(request):
+    logger.info("Fetching unread emails for user.")
+    try:
+        unread_emails = Email.objects.filter(user=request.user, is_read=False).order_by('-received_date_time')[:10]
+        emails_data = [{
+            'email_id': email.email_id,
+            'sender': email.sender,
+            'subject': email.subject,
+            'received_date_time': email.received_date_time.isoformat()
+        } for email in unread_emails]
+        return Response({'emails': emails_data})
+    except Exception as e:
+        logger.error(f"Error fetching unread emails: {str(e)}")
+        return Response({'error': 'Failed to fetch unread emails'}, status=500)

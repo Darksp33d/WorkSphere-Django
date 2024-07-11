@@ -3,7 +3,7 @@ from django.urls import path
 from worksphere.views.hello_world import hello_world
 from worksphere.views.auth_view import login_view, logout_view
 from worksphere.views.dashboard_view import dashboard_view
-from worksphere.views.api_view import get_emails, start_outlook_auth, outlook_auth_callback, mark_email_read, check_outlook_connection
+from worksphere.views.api_view import get_emails, start_outlook_auth, outlook_auth_callback, mark_email_read, check_outlook_connection, get_unread_emails
 from worksphere.views.csrf_token_view import get_csrf_token
 
 urlpatterns = [
@@ -18,4 +18,5 @@ urlpatterns = [
     path('api/emails/', get_emails, name='get_emails'),
     path('api/mark-email-read/', mark_email_read, name='mark_email_read'),
     path('api/check-outlook-connection/', check_outlook_connection, name='check_outlook_connection'),
+    path('api/unread-emails/', get_unread_emails, name='get_unread_emails'),
 ]
