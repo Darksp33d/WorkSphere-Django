@@ -1,8 +1,8 @@
 from django.db import models
-from ..models.user import CustomUser as User
+from .user import CustomUser
 
 class Email(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='outlook_emails')
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='outlook_emails')
     email_id = models.CharField(max_length=255, unique=True)
     sender = models.CharField(max_length=255, default='Unknown')
     subject = models.CharField(max_length=255, default='(No subject)')
