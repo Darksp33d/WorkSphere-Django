@@ -23,6 +23,8 @@ INSTALLED_APPS = [
     'worksphere',
 ]
 
+AUTH_USER_MODEL = 'worksphere.models.user.CustomUser'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

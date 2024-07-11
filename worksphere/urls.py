@@ -6,7 +6,8 @@ from worksphere.views.dashboard_view import dashboard_view
 from worksphere.views.api_view import get_emails, start_outlook_auth, outlook_auth_callback, mark_email_read, check_outlook_connection, get_unread_emails
 from worksphere.views.csrf_token_view import get_csrf_token
 from worksphere.views.slack_view import start_slack_auth, slack_auth_callback, check_slack_connection, get_unread_slack_messages
-
+from worksphere.views.sphere_connect_view import send_private_message, get_private_messages, create_group, send_group_message, get_group_messages, get_contacts, get_groups, mark_message_read, mark_group_message_read
+from worksphere.views.user_view import current_user
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/hello/', hello_world, name='hello_world'),
@@ -24,4 +25,15 @@ urlpatterns = [
     path('auth/slack/callback/', slack_auth_callback, name='slack_auth_callback'),
     path('api/check-slack-connection/', check_slack_connection, name='check_slack_connection'),
     path('api/get-unread-slack-messages/', get_unread_slack_messages, name='get_unread_slack_messages'),
+    path('api/send-private-message/', send_private_message, name='send_private_message'),
+    path('api/get-private-messages/', get_private_messages, name='get_private_messages'),
+    path('api/create-group/', create_group, name='create_group'),
+    path('api/send-group-message/', send_group_message, name='send_group_message'),
+    path('api/get-group-messages/<int:group_id>/', get_group_messages, name='get_group_messages'),
+    path('api/get-contacts/', get_contacts, name='get_contacts'),
+    path('api/get-groups/', get_groups, name='get_groups'),
+    path('api/mark-message-read/', mark_message_read, name='mark_message_read'),
+    path('api/mark-group-message-read/', mark_group_message_read, name='mark_group_message_read'),
+    path('api/current-user/', current_user, name='current_user'),
+
 ]
