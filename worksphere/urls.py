@@ -5,6 +5,7 @@ from worksphere.views.auth_view import login_view, logout_view
 from worksphere.views.dashboard_view import dashboard_view
 from worksphere.views.api_view import get_emails, start_outlook_auth, outlook_auth_callback, mark_email_read, check_outlook_connection, get_unread_emails
 from worksphere.views.csrf_token_view import get_csrf_token
+from worksphere.views.slack_view import start_slack_auth, slack_auth_callback, check_slack_connection, get_unread_slack_messages
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -19,4 +20,8 @@ urlpatterns = [
     path('api/mark-email-read/', mark_email_read, name='mark_email_read'),
     path('api/check-outlook-connection/', check_outlook_connection, name='check_outlook_connection'),
     path('api/unread-emails/', get_unread_emails, name='get_unread_emails'),
+    path('api/slack/auth/', start_slack_auth, name='start_slack_auth'),
+    path('auth/slack/callback/', slack_auth_callback, name='slack_auth_callback'),
+    path('api/check-slack-connection/', check_slack_connection, name='check_slack_connection'),
+    path('api/get-unread-slack-messages/', get_unread_slack_messages, name='get_unread_slack_messages'),
 ]
