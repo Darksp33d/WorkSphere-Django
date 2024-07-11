@@ -134,17 +134,24 @@ def get_emails(request):
             body_content = email_data.get('body', {}).get('content', '')
             received_date_time = make_aware(datetime.strptime(email_data.get('receivedDateTime'), "%Y-%m-%dT%H:%M:%SZ"))
 
-            email, created = Email.objects.update_or_create(
-                email_id=email_id,
-                defaults={
-                    'user': request.user,
-                    'sender': sender_email,
-                    'subject': subject,
-                    'body': body_content,
-                    'received_date_time': received_date_time,
-                    'is_read': False if created else Email.objects.get(email_id=email_id).is_read
-                }
-            )
+            try:
+                email, created = Email.objects.update_or_create(
+                    email_id=email_id,
+                    user=request.user,
+                    defaults={
+                        'sender': sender_email,
+                        'subject': subject,
+                        'body': body_content,
+                        'received_date_time': received_date_time,
+                    }
+                )
+                if created:
+                    email.is_read = False
+                    email.save()
+            except Exception as e:
+                logger.error(f"Error creating/updating email: {str(e)}")
+                continue
+
             emails.append({
                 'email_id': email.email_id,
                 'sender': email.sender,
@@ -158,7 +165,8 @@ def get_emails(request):
     else:
         logger.error(f"Failed to fetch emails with status {response.status_code}")
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
-
+    
+    
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def mark_email_read(request):
