@@ -1,5 +1,6 @@
 from django.db import models
-from .user import CustomUser
+from worksphere.models.user import CustomUser
+
 
 class OutlookAuth(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)

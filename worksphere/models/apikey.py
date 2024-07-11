@@ -1,5 +1,5 @@
 from django.db import models
-from .user import CustomUser
+from worksphere.models.user import CustomUser
 
 class APIKey(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
