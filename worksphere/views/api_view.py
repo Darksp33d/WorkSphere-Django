@@ -1,3 +1,5 @@
+# api_view.py
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -46,7 +48,7 @@ def start_outlook_auth(request):
     logger.info("Starting Outlook authentication process.")
     auth_url = f"{OUTLOOK_AUTH_URL}?client_id={settings.OUTLOOK_CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope={OUTLOOK_SCOPE}&response_mode=query"
     logger.debug(f"Generated auth URL: {auth_url}")
-    return Response({'auth_url': auth_url})
+    return redirect(auth_url)
 
 @api_view(['GET'])
 def outlook_auth_callback(request):
