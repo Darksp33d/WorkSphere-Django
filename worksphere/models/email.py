@@ -4,8 +4,8 @@ from django.contrib.auth.models import User
 class Email(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='outlook_emails')
     email_id = models.CharField(max_length=255, unique=True)
-    sender = models.CharField(max_length=255)
-    subject = models.CharField(max_length=255)
+    sender = models.CharField(max_length=255, default='Unknown')
+    subject = models.CharField(max_length=255, default='(No subject)')
     body = models.TextField()
     received_date_time = models.DateTimeField()
     is_read = models.BooleanField(default=False)

@@ -126,14 +126,19 @@ def get_emails(request):
         emails = response.json().get('value', [])
         # Save emails to database and include read/unread status
         for email_data in emails:
+            sender_email = email_data.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
+            subject = email_data.get('subject', '(No subject)')
+            body_content = email_data.get('body', {}).get('content', '')
+            received_date_time = email_data.get('receivedDateTime')
+
             email, created = Email.objects.update_or_create(
                 email_id=email_data['id'],
                 defaults={
                     'user': request.user,
-                    'sender': email_data['from']['emailAddress']['address'],
-                    'subject': email_data['subject'],
-                    'body': email_data['body']['content'],
-                    'received_date_time': email_data['receivedDateTime'],
+                    'sender': sender_email,
+                    'subject': subject,
+                    'body': body_content,
+                    'received_date_time': received_date_time,
                     'is_read': email_data.get('isRead', False)
                 }
             )
@@ -144,6 +149,7 @@ def get_emails(request):
     else:
         logger.error(f"Failed to fetch emails with status {response.status_code}")
         return Response({'error': 'Failed to fetch emails'}, status=response.status_code)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
