@@ -97,6 +97,7 @@ REST_FRAMEWORK = {
 
 CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
+    "https://worksphere-django-c79ad3982526.herokuapp.com"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -104,6 +105,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
+    "https://worksphere-django-c79ad3982526.herokuapp.com"
 ]
 
 # Ensure these settings are present
