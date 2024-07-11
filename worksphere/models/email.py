@@ -6,7 +6,7 @@ class Email(models.Model):
     email_id = models.CharField(max_length=255, unique=True)
     sender = models.CharField(max_length=255, default='Unknown')
     subject = models.CharField(max_length=255, default='(No subject)')
-    body = models.TextField()
+    body = models.TextField(blank=True)
     received_date_time = models.DateTimeField()
     is_read = models.BooleanField(default=False)
 

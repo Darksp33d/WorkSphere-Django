@@ -127,7 +127,7 @@ def get_emails(request):
         # Save emails to database and include read/unread status
         for email_data in emails:
             sender_email = email_data.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
-            subject = email_data.get('subject', '(No subject)')
+            subject = email_data.get('subject') or '(No subject)'
             body_content = email_data.get('body', {}).get('content', '')
             received_date_time = email_data.get('receivedDateTime')
 
