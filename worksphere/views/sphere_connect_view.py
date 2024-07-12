@@ -117,6 +117,8 @@ def send_group_message(request):
         return Response({'error': 'Group not found or you are not a member'}, status=404)
     
     message = GroupMessage.objects.create(group=group, sender=request.user, content=content)
+    message.read_by.add(request.user)  # Mark as read for the sender
+    
     return Response({
         'message': 'Message sent successfully',
         'message_data': {
@@ -125,7 +127,7 @@ def send_group_message(request):
             'sender': request.user.email,
             'content': message.content,
             'timestamp': message.timestamp,
-            'is_read': message.is_read
+            'is_read': True  # It's read by the sender
         }
     })
 
@@ -143,7 +145,7 @@ def get_group_messages(request, group_id):
         'sender': message.sender.email,
         'content': message.content,
         'timestamp': message.timestamp,
-        'is_read': message.is_read,
+        'is_read': message.read_by.filter(id=request.user.id).exists(),
         'channel_name': group.name
     } for message in messages]
     return Response({'messages': messages_data})
@@ -166,8 +168,7 @@ def mark_group_message_read(request):
     message_id = request.data.get('message_id')
     try:
         message = GroupMessage.objects.get(id=message_id, group__members=request.user)
-        message.is_read = True
-        message.save()
+        message.read_by.add(request.user)
         return Response({'message': 'Group message marked as read'})
     except GroupMessage.DoesNotExist:
         return Response({'error': 'Group message not found'}, status=404)
@@ -185,28 +186,26 @@ def leave_group(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def add_group_members(request):
+def add_user_to_channel(request):
     group_id = request.data.get('group_id')
-    member_ids = request.data.get('member_ids', [])
+    user_id = request.data.get('user_id')
     try:
-        group = Group.objects.get(id=group_id, members=request.user)
-        for member_id in member_ids:
-            try:
-                member = CustomUser.objects.get(id=member_id)
-                group.members.add(member)
-            except CustomUser.DoesNotExist:
-                pass  # Silently ignore invalid member IDs
-        return Response({'message': 'Members added successfully'})
+        group = Group.objects.get(id=group_id)
+        user = CustomUser.objects.get(id=user_id)
+        group.members.add(user)
+        return Response({'message': 'User added to channel successfully'})
     except Group.DoesNotExist:
-        return Response({'error': 'Group not found or you are not a member'}, status=404)
-    
+        return Response({'error': 'Group not found'}, status=404)
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_recent_messages(request):
     user = request.user
     recent_messages = GroupMessage.objects.filter(
         group__members=user
-    ).order_by('-timestamp')[:10]  # Get the 10 most recent messages
+    ).select_related('group', 'sender').order_by('-timestamp')[:10]
     
     messages_data = [{
         'id': message.id,
@@ -214,7 +213,8 @@ def get_recent_messages(request):
         'content': message.content,
         'timestamp': message.timestamp,
         'channel_name': message.group.name,
-        'is_read': message.is_read
+        'group_id': message.group.id,
+        'is_read': message.read_by.filter(id=user.id).exists()
     } for message in recent_messages]
     
     return Response({'messages': messages_data})
@@ -224,9 +224,8 @@ def get_recent_messages(request):
 def get_unread_sphereconnect_messages(request):
     user = request.user
     unread_messages = GroupMessage.objects.filter(
-        group__members=user,
-        is_read=False
-    ).select_related('group', 'sender').order_by('-timestamp')
+        group__members=user
+    ).exclude(read_by=user).select_related('group', 'sender').order_by('-timestamp')
     
     messages_data = [{
         'id': message.id,
@@ -234,7 +233,8 @@ def get_unread_sphereconnect_messages(request):
         'content': message.content,
         'timestamp': message.timestamp,
         'channel_name': message.group.name,
-        'is_read': message.is_read
+        'group_id': message.group.id,
+        'is_read': False
     } for message in unread_messages]
     
     return Response({'messages': messages_data})
@@ -245,8 +245,7 @@ def mark_sphereconnect_message_read(request):
     message_id = request.data.get('message_id')
     try:
         message = GroupMessage.objects.get(id=message_id, group__members=request.user)
-        message.is_read = True
-        message.save()
-        return Response({'message': 'Message marked as read'})
+        message.read_by.add(request.user)
+        return Response({'message': 'SphereConnect message marked as read'})
     except GroupMessage.DoesNotExist:
-        return Response({'error': 'Message not found'}, status=404)
+        return Response({'error': 'SphereConnect message not found'}, status=404)
