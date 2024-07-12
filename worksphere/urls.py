@@ -7,7 +7,7 @@ from worksphere.views.api_view import get_emails, start_outlook_auth, outlook_au
 from worksphere.views.csrf_token_view import get_csrf_token
 from worksphere.views.slack_view import start_slack_auth, slack_auth_callback, check_slack_connection, get_unread_slack_messages
 from worksphere.views.sphere_connect_view import *
-from worksphere.views.user_view import current_user
+from worksphere.views.user_view import current_user, update_profile
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/hello/', hello_world, name='hello_world'),
@@ -39,5 +39,6 @@ urlpatterns = [
     path('api/get-recent-messages/', get_recent_messages, name='get_recent_messages'),
     path('api/get-unread-sphereconnect-messages/', get_unread_sphereconnect_messages, name='get_unread_sphereconnect_messages'),
     path('api/mark-sphereconnect-message-read/', mark_sphereconnect_message_read, name='mark_sphereconnect_message_read'),
+    path('api/update-profile/', update_profile, name='update_profile'),
 
 ]
