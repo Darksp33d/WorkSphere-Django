@@ -22,7 +22,7 @@ class GroupMessage(models.Model):
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='group_messages', on_delete=models.CASCADE)
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    is_read = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False, db_index=True)
 
 class Contact(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='user_contacts', on_delete=models.CASCADE)

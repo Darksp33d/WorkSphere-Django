@@ -2,6 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
+from django.db.models import Prefetch
 from ..models.sphere_connect import Message, Group, GroupMessage
 from ..models import CustomUser
 
@@ -91,7 +92,9 @@ def create_group(request):
 @permission_classes([IsAuthenticated])
 def get_groups(request):
     user = request.user
-    groups = user.groups.all()
+    groups = Group.objects.filter(members=user).prefetch_related(
+        Prefetch('members', queryset=CustomUser.objects.only('id', 'first_name', 'last_name', 'email'))
+    )
     groups_data = [{
         'id': group.id,
         'name': group.name,
@@ -223,7 +226,7 @@ def get_unread_sphereconnect_messages(request):
     unread_messages = GroupMessage.objects.filter(
         group__members=user,
         is_read=False
-    ).order_by('-timestamp')
+    ).select_related('group', 'sender').order_by('-timestamp')
     
     messages_data = [{
         'id': message.id,
