@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/check-slack-connection/', check_slack_connection, name='check_slack_connection'),
     path('api/get-unread-slack-messages/', get_unread_slack_messages, name='get_unread_slack_messages'),
     path('api/send-private-message/', send_private_message, name='send_private_message'),
+    path('api/get-private-chats/', get_private_chats, name='get_private_chats'),
     path('api/get-private-messages/', get_private_messages, name='get_private_messages'),
     path('api/create-group/', create_group, name='create_group'),
     path('api/send-group-message/', send_group_message, name='send_group_message'),

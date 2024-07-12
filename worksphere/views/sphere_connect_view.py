@@ -46,9 +46,45 @@ def send_private_message(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_private_chats(request):
+    user = request.user
+    private_chats = Message.objects.filter(Q(sender=user) | Q(recipient=user)).values('sender', 'recipient').distinct()
+    
+    chat_users = set()
+    for chat in private_chats:
+        chat_users.add(chat['sender'] if chat['sender'] != user.id else chat['recipient'])
+    
+    chat_data = []
+    for user_id in chat_users:
+        user = CustomUser.objects.get(id=user_id)
+        chat_data.append({
+            'id': user.id,
+            'name': f"{user.first_name} {user.last_name}",
+            'email': user.email,
+            'profile_picture': user.profile_picture.url if user.profile_picture else None
+        })
+    
+    return Response({'private_chats': chat_data})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_private_messages(request):
     user = request.user
-    messages = Message.objects.filter(Q(sender=user) | Q(recipient=user)).order_by('-timestamp')
+    other_user_id = request.query_params.get('user_id')
+    
+    if not other_user_id:
+        return Response({'error': 'user_id is required'}, status=400)
+    
+    try:
+        other_user = CustomUser.objects.get(id=other_user_id)
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+    
+    messages = Message.objects.filter(
+        (Q(sender=user) & Q(recipient=other_user)) |
+        (Q(sender=other_user) & Q(recipient=user))
+    ).order_by('timestamp')
+    
     messages_data = [{
         'id': message.id,
         'sender': message.sender.email,
@@ -57,6 +93,7 @@ def get_private_messages(request):
         'timestamp': message.timestamp,
         'is_read': message.is_read
     } for message in messages]
+    
     return Response({'messages': messages_data})
 
 @api_view(['POST'])
