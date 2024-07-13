@@ -36,8 +36,8 @@ def send_private_message(request):
         'message': 'Message sent successfully',
         'message_data': {
             'id': message.id,
-            'sender': sender.email,
-            'recipient': recipient.email,
+            'sender': sender.first_name,
+            'recipient': recipient.first_name,
             'content': message.content,
             'timestamp': message.timestamp,
             'is_read': message.is_read
@@ -87,8 +87,8 @@ def get_private_messages(request):
     
     messages_data = [{
         'id': message.id,
-        'sender': message.sender.email,
-        'recipient': message.recipient.email,
+        'sender': message.sender.first_name,
+        'recipient': message.recipient.first_name,
         'content': message.content,
         'timestamp': message.timestamp,
         'is_read': message.is_read
@@ -120,7 +120,7 @@ def create_group(request):
             'id': group.id,
             'name': group.name,
             'created_at': group.created_at,
-            'created_by': request.user.email,
+            'created_by': request.user.first_name,
             'members': [{'id': member.id, 'name': f"{member.first_name} {member.last_name}"} for member in group.members.all()]
         }
     })
@@ -136,7 +136,7 @@ def get_groups(request):
         'id': group.id,
         'name': group.name,
         'created_at': group.created_at,
-        'created_by': group.created_by.email if group.created_by else None,
+        'created_by': group.created_by.first_name if group.created_by else None,
         'members': [{'id': member.id, 'name': f"{member.first_name} {member.last_name}"} for member in group.members.all()]
     } for group in groups]
     return Response({'groups': groups_data})
@@ -161,7 +161,7 @@ def send_group_message(request):
         'message_data': {
             'id': message.id,
             'group_id': group.id,
-            'sender': request.user.email,
+            'sender': request.user.first_name,
             'content': message.content,
             'timestamp': message.timestamp,
             'is_read': True  # It's read by the sender
@@ -179,7 +179,7 @@ def get_group_messages(request, group_id):
     messages = GroupMessage.objects.filter(group=group).order_by('-timestamp')
     messages_data = [{
         'id': message.id,
-        'sender': message.sender.email,
+        'sender': message.sender.first_name,
         'content': message.content,
         'timestamp': message.timestamp,
         'is_read': message.read_by.filter(id=request.user.id).exists(),
@@ -246,7 +246,7 @@ def get_recent_messages(request):
     
     messages_data = [{
         'id': message.id,
-        'sender': message.sender.email,
+        'sender': message.sender.first_name,
         'content': message.content,
         'timestamp': message.timestamp,
         'channel_name': message.group.name,
@@ -266,7 +266,7 @@ def get_unread_sphereconnect_messages(request):
     
     messages_data = [{
         'id': message.id,
-        'sender': message.sender.email,
+        'sender': message.sender.first_name,
         'content': message.content,
         'timestamp': message.timestamp,
         'channel_name': message.group.name,

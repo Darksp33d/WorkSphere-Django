@@ -104,7 +104,6 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-
 CSRF_TRUSTED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
     "https://worksphere-django-c79ad3982526.herokuapp.com"
@@ -119,8 +118,8 @@ CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'None'
 
-CSRF_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SAMESITE = 'None'
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_NAME = 'csrftoken'
 
 OUTLOOK_CLIENT_ID = 'd1307f57-2f79-4e7b-9429-4cf06418af8f'
 OUTLOOK_CLIENT_SECRET = 'gPY8Q~e~tbn5~XQx9fkzpiM_Sgha3bjtL2EbzdgF'
