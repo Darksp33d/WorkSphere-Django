@@ -115,13 +115,22 @@ REST_FRAMEWORK = {
     ],
 }
 
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
     "https://worksphere-django-c79ad3982526.herokuapp.com"
 ]
-
-CORS_ALLOW_CREDENTIALS = True
-
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 CSRF_TRUSTED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
     "https://worksphere-django-c79ad3982526.herokuapp.com"

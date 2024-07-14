@@ -1,1 +1,1 @@
-web: gunicorn worksphere.wsgi
+web: gunicorn worksphere.wsgi --timeout 120

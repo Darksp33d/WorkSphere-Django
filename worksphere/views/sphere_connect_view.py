@@ -1,21 +1,25 @@
-# views/sphere_connect_view.py
-
 from django.http import StreamingHttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, renderer_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.renderers import BaseRenderer
 from django.db.models import Q
 from ..models.sphere_connect import Message, Group, GroupMessage, TypingStatus, Contact
 from ..models import CustomUser
 import json
-import asyncio
 from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
 import time
 
+class EventStreamRenderer(BaseRenderer):
+    media_type = "text/event-stream"
+    format = "txt"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data.encode("utf-8")
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -239,6 +243,7 @@ def user_typing(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@renderer_classes([EventStreamRenderer])
 def events(request):
     channel_id = request.GET.get('channel')
     contact_id = request.GET.get('contact')
