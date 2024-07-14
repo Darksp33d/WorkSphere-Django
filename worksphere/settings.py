@@ -34,6 +34,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.http.ConditionalGetMiddleware',
 ]
 
 ROOT_URLCONF = 'worksphere.urls'
@@ -53,6 +54,23 @@ TEMPLATES = [
         },
     },
 ]
+
+# Configure caching with Redis
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ.get('REDIS_URL'),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+STREAM_RESPONSE_TIMEOUT = 3600
+
+# Use Redis for session management
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
 
 WSGI_APPLICATION = 'worksphere.wsgi.application'
 
@@ -108,6 +126,9 @@ CSRF_TRUSTED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
     "https://worksphere-django-c79ad3982526.herokuapp.com"
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = True
 
 # Ensure these settings are present
 SESSION_COOKIE_SECURE = True

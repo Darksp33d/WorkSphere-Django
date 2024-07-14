@@ -1,20 +1,31 @@
+# views/sphere_connect_view.py
+
+from django.http import StreamingHttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
-from django.db.models import Prefetch
-from ..models.sphere_connect import Message, Group, GroupMessage
+from ..models.sphere_connect import Message, Group, GroupMessage, TypingStatus, Contact
 from ..models import CustomUser
+import json
+import asyncio
+from datetime import timedelta
+from django.utils import timezone
+from django.core.cache import cache
+import time
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_contacts(request):
-    contacts = CustomUser.objects.exclude(id=request.user.id)
+    contacts = Contact.objects.filter(user=request.user).select_related('contact')
     contacts_data = [{
-        'id': contact.id,
-        'name': f"{contact.first_name} {contact.last_name}",
-        'email': contact.email,
-        'profile_picture': contact.profile_picture.url if contact.profile_picture else None
+        'id': contact.contact.id,
+        'name': f"{contact.contact.first_name} {contact.contact.last_name}",
+        'email': contact.contact.email,
+        'profile_picture': contact.contact.profile_picture.url if contact.contact.profile_picture else None
     } for contact in contacts]
     return Response({'contacts': contacts_data})
 
@@ -34,35 +45,21 @@ def send_private_message(request):
     message = Message.objects.create(sender=sender, recipient=recipient, content=content)
     return Response({
         'message': 'Message sent successfully',
-        'message_data': {
-            'id': message.id,
-            'sender': sender.first_name,
-            'recipient': recipient.first_name,
-            'content': message.content,
-            'timestamp': message.timestamp,
-            'is_read': message.is_read
-        }
+        'message_data': message.to_dict()
     })
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_private_chats(request):
     user = request.user
-    private_chats = Message.objects.filter(Q(sender=user) | Q(recipient=user)).values('sender', 'recipient').distinct()
+    private_chats = Contact.objects.filter(user=user).select_related('contact')
     
-    chat_users = set()
-    for chat in private_chats:
-        chat_users.add(chat['sender'] if chat['sender'] != user.id else chat['recipient'])
-    
-    chat_data = []
-    for user_id in chat_users:
-        user = CustomUser.objects.get(id=user_id)
-        chat_data.append({
-            'id': user.id,
-            'name': f"{user.first_name} {user.last_name}",
-            'email': user.email,
-            'profile_picture': user.profile_picture.url if user.profile_picture else None
-        })
+    chat_data = [{
+        'id': chat.contact.id,
+        'name': f"{chat.contact.first_name} {chat.contact.last_name}",
+        'email': chat.contact.email,
+        'profile_picture': chat.contact.profile_picture.url if chat.contact.profile_picture else None
+    } for chat in private_chats]
     
     return Response({'private_chats': chat_data})
 
@@ -85,14 +82,7 @@ def get_private_messages(request):
         (Q(sender=other_user) & Q(recipient=user))
     ).order_by('timestamp')
     
-    messages_data = [{
-        'id': message.id,
-        'sender': message.sender.first_name,
-        'recipient': message.recipient.first_name,
-        'content': message.content,
-        'timestamp': message.timestamp,
-        'is_read': message.is_read
-    } for message in messages]
+    messages_data = [message.to_dict() for message in messages]
     
     return Response({'messages': messages_data})
 
@@ -129,9 +119,7 @@ def create_group(request):
 @permission_classes([IsAuthenticated])
 def get_groups(request):
     user = request.user
-    groups = Group.objects.filter(members=user).prefetch_related(
-        Prefetch('members', queryset=CustomUser.objects.only('id', 'first_name', 'last_name', 'email'))
-    )
+    groups = Group.objects.filter(members=user).prefetch_related('members')
     groups_data = [{
         'id': group.id,
         'name': group.name,
@@ -158,14 +146,7 @@ def send_group_message(request):
     
     return Response({
         'message': 'Message sent successfully',
-        'message_data': {
-            'id': message.id,
-            'group_id': group.id,
-            'sender': request.user.first_name,
-            'content': message.content,
-            'timestamp': message.timestamp,
-            'is_read': True  # It's read by the sender
-        }
+        'message_data': message.to_dict()
     })
 
 @api_view(['GET'])
@@ -177,14 +158,7 @@ def get_group_messages(request, group_id):
         return Response({'error': 'Group not found or you are not a member'}, status=404)
     
     messages = GroupMessage.objects.filter(group=group).order_by('-timestamp')
-    messages_data = [{
-        'id': message.id,
-        'sender': message.sender.first_name,
-        'content': message.content,
-        'timestamp': message.timestamp,
-        'is_read': message.read_by.filter(id=request.user.id).exists(),
-        'channel_name': group.name
-    } for message in messages]
+    messages_data = [message.to_dict() for message in messages]
     return Response({'messages': messages_data})
 
 @api_view(['POST'])
@@ -212,17 +186,6 @@ def mark_group_message_read(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def leave_group(request):
-    group_id = request.data.get('group_id')
-    try:
-        group = Group.objects.get(id=group_id, members=request.user)
-        group.members.remove(request.user)
-        return Response({'message': 'You have left the group successfully'})
-    except Group.DoesNotExist:
-        return Response({'error': 'Group not found or you are not a member'}, status=404)
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def add_user_to_channel(request):
     group_id = request.data.get('group_id')
     user_id = request.data.get('user_id')
@@ -236,6 +199,88 @@ def add_user_to_channel(request):
     except CustomUser.DoesNotExist:
         return Response({'error': 'User not found'}, status=404)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_user_from_channel(request):
+    group_id = request.data.get('group_id')
+    user_id = request.data.get('user_id')
+    try:
+        group = Group.objects.get(id=group_id)
+        user = CustomUser.objects.get(id=user_id)
+        group.members.remove(user)
+        return Response({'message': 'User removed from channel successfully'})
+    except Group.DoesNotExist:
+        return Response({'error': 'Group not found'}, status=404)
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def user_typing(request):
+    channel_id = request.data.get('channel_id')
+    contact_id = request.data.get('contact_id')
+    is_typing = request.data.get('is_typing')
+
+    if channel_id:
+        typing_key = f"typing:channel:{channel_id}"
+    elif contact_id:
+        typing_key = f"typing:private:{request.user.id}:{contact_id}"
+    else:
+        return Response({'error': 'Either channel_id or contact_id is required'}, status=400)
+
+    typing_users = cache.get(typing_key, {})
+    if is_typing:
+        typing_users[request.user.id] = timezone.now().timestamp()
+    else:
+        typing_users.pop(request.user.id, None)
+    cache.set(typing_key, typing_users, timeout=None)
+
+    return Response({'status': 'ok'})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def events(request):
+    channel_id = request.GET.get('channel')
+    contact_id = request.GET.get('contact')
+
+    def event_stream():
+        last_id = 0
+        while True:
+            if channel_id:
+                messages = GroupMessage.objects.filter(group_id=channel_id, id__gt=last_id).order_by('id')
+                typing_key = f"typing:channel:{channel_id}"
+            elif contact_id:
+                messages = Message.objects.filter(
+                    (Q(sender_id=request.user.id) & Q(recipient_id=contact_id)) |
+                    (Q(sender_id=contact_id) & Q(recipient_id=request.user.id)),
+                    id__gt=last_id
+                ).order_by('id')
+                typing_key = f"typing:private:{request.user.id}:{contact_id}"
+            else:
+                messages = []
+                typing_key = None
+
+            for message in messages:
+                last_id = message.id
+                yield f"data: {json.dumps({'type': 'new_message', 'message': message.to_dict()})}\n\n"
+            
+            if typing_key:
+                typing_users = cache.get(typing_key, {})
+                for user_id, timestamp in list(typing_users.items()):
+                    if timezone.now().timestamp() - timestamp > 5:
+                        del typing_users[user_id]
+                    else:
+                        yield f"data: {json.dumps({'type': 'typing_status', 'user_id': user_id, 'is_typing': True})}\n\n"
+                cache.set(typing_key, typing_users, timeout=None)
+            
+            yield ": keepalive\n\n"
+            time.sleep(1)
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_recent_messages(request):
@@ -244,15 +289,7 @@ def get_recent_messages(request):
         group__members=user
     ).select_related('group', 'sender').order_by('-timestamp')[:10]
     
-    messages_data = [{
-        'id': message.id,
-        'sender': message.sender.first_name,
-        'content': message.content,
-        'timestamp': message.timestamp,
-        'channel_name': message.group.name,
-        'group_id': message.group.id,
-        'is_read': message.read_by.filter(id=user.id).exists()
-    } for message in recent_messages]
+    messages_data = [message.to_dict() for message in recent_messages]
     
     return Response({'messages': messages_data})
 
@@ -264,15 +301,7 @@ def get_unread_sphereconnect_messages(request):
         group__members=user
     ).exclude(read_by=user).select_related('group', 'sender').order_by('-timestamp')
     
-    messages_data = [{
-        'id': message.id,
-        'sender': message.sender.first_name,
-        'content': message.content,
-        'timestamp': message.timestamp,
-        'channel_name': message.group.name,
-        'group_id': message.group.id,
-        'is_read': False
-    } for message in unread_messages]
+    messages_data = [message.to_dict() for message in unread_messages]
     
     return Response({'messages': messages_data})
 
@@ -286,3 +315,51 @@ def mark_sphereconnect_message_read(request):
         return Response({'message': 'SphereConnect message marked as read'})
     except GroupMessage.DoesNotExist:
         return Response({'error': 'SphereConnect message not found'}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_contact(request):
+    contact_id = request.data.get('contact_id')
+    if not contact_id:
+        return Response({'error': 'Contact ID is required'}, status=400)
+    try:
+        contact = CustomUser.objects.get(id=contact_id)
+        Contact.objects.get_or_create(user=request.user, contact=contact)
+        return Response({'message': 'Contact added successfully'})
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_contact(request):
+    contact_id = request.data.get('contact_id')
+    if not contact_id:
+        return Response({'error': 'Contact ID is required'}, status=400)
+    try:
+        contact = CustomUser.objects.get(id=contact_id)
+        Contact.objects.filter(user=request.user, contact=contact).delete()
+        return Response({'message': 'Contact removed successfully'})
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def search_users(request):
+    query = request.GET.get('q', '')
+    if len(query) < 3:
+        return Response({'error': 'Search query must be at least 3 characters long'}, status=400)
+    
+    users = CustomUser.objects.filter(
+        Q(first_name__icontains=query) |
+        Q(last_name__icontains=query) |
+        Q(email__icontains=query)
+    ).exclude(id=request.user.id)[:10]  # Limit to 10 results
+    
+    users_data = [{
+        'id': user.id,
+        'name': f"{user.first_name} {user.last_name}",
+        'email': user.email,
+        'profile_picture': user.profile_picture.url if user.profile_picture else None
+    } for user in users]
+    
+    return Response({'users': users_data})
