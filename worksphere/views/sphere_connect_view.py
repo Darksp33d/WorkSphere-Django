@@ -24,12 +24,12 @@ class EventStreamRenderer(BaseRenderer):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_contacts(request):
-    contacts = Contact.objects.filter(user=request.user).select_related('contact')
+    contacts = CustomUser.objects.exclude(id=request.user.id)
     contacts_data = [{
-        'id': contact.contact.id,
-        'name': f"{contact.contact.first_name} {contact.contact.last_name}",
-        'email': contact.contact.email,
-        'profile_picture': contact.contact.profile_picture.url if contact.contact.profile_picture else None
+        'id': contact.id,
+        'name': f"{contact.first_name} {contact.last_name}",
+        'email': contact.email,
+        'profile_picture': contact.profile_picture.url if contact.profile_picture else None
     } for contact in contacts]
     return Response({'contacts': contacts_data})
 
@@ -192,10 +192,10 @@ def mark_group_message_read(request):
 @permission_classes([IsAuthenticated])
 def add_user_to_channel(request):
     group_id = request.data.get('group_id')
-    user_id = request.data.get('user_id')
+    email = request.data.get('email')
     try:
         group = Group.objects.get(id=group_id)
-        user = CustomUser.objects.get(id=user_id)
+        user = CustomUser.objects.get(email=email)
         group.members.add(user)
         return Response({'message': 'User added to channel successfully'})
     except Group.DoesNotExist:
