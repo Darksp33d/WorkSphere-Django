@@ -223,7 +223,7 @@ def remove_user_from_channel(request):
 def user_typing(request):
     channel_id = request.data.get('channel_id')
     contact_id = request.data.get('contact_id')
-    is_typing = request.data.get('is_typing')
+    is_typing = request.data.get('is_typing', False)
 
     if channel_id:
         typing_key = f"typing:channel:{channel_id}"
@@ -234,9 +234,9 @@ def user_typing(request):
 
     typing_users = cache.get(typing_key, {})
     if is_typing:
-        typing_users[request.user.id] = timezone.now().timestamp()
+        typing_users[str(request.user.id)] = timezone.now().timestamp()
     else:
-        typing_users.pop(request.user.id, None)
+        typing_users.pop(str(request.user.id), None)
     cache.set(typing_key, typing_users, timeout=None)
 
     return Response({'status': 'ok'})
@@ -251,21 +251,19 @@ def events(request):
     def event_stream():
         last_id = 0
         while True:
+            new_messages = []
             if channel_id:
-                messages = GroupMessage.objects.filter(group_id=channel_id, id__gt=last_id).order_by('id')
+                new_messages = GroupMessage.objects.filter(group_id=channel_id, id__gt=last_id).order_by('id')
                 typing_key = f"typing:channel:{channel_id}"
             elif contact_id:
-                messages = Message.objects.filter(
+                new_messages = Message.objects.filter(
                     (Q(sender_id=request.user.id) & Q(recipient_id=contact_id)) |
                     (Q(sender_id=contact_id) & Q(recipient_id=request.user.id)),
                     id__gt=last_id
                 ).order_by('id')
                 typing_key = f"typing:private:{request.user.id}:{contact_id}"
-            else:
-                messages = []
-                typing_key = None
-
-            for message in messages:
+            
+            for message in new_messages:
                 last_id = message.id
                 yield f"data: {json.dumps({'type': 'new_message', 'message': message.to_dict()})}\n\n"
             
@@ -279,7 +277,7 @@ def events(request):
                 cache.set(typing_key, typing_users, timeout=None)
             
             yield ": keepalive\n\n"
-            time.sleep(1)
+            time.sleep(0.5)  # Reduce the sleep time for more responsiveness
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
