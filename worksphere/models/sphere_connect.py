@@ -37,6 +37,7 @@ class GroupMessage(models.Model):
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
     read_by = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='read_group_messages')
+    is_pinned = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Group message in {self.group.name} by {self.sender}"
