@@ -130,6 +130,7 @@ REST_FRAMEWORK = {
 
 CORS_ALLOW_CREDENTIALS = True
 
+
 CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
     "https://worksphere-django-c79ad3982526.herokuapp.com",
