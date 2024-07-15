@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'worksphere',
 ]
 
@@ -54,6 +55,18 @@ TEMPLATES = [
         },
     },
 ]
+
+
+ASGI_APPLICATION = 'worksphere.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379')],
+        },
+    },
+}
 
 # Configure caching with Redis
 CACHES = {
@@ -116,10 +129,13 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOWED_ORIGINS = [
     "https://worksphere-react-2812e798f5dd.herokuapp.com",
-    "https://worksphere-django-c79ad3982526.herokuapp.com"
+    "https://worksphere-django-c79ad3982526.herokuapp.com",
+    "wss://worksphere-django-c79ad3982526.herokuapp.com"
 ]
+
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',

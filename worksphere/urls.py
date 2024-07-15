@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from worksphere.views.hello_world import hello_world
 from worksphere.views.auth_view import login_view, logout_view
 from worksphere.views.dashboard_view import dashboard_view
@@ -47,5 +47,6 @@ urlpatterns = [
     path('api/add-contact/', add_contact, name='add_contact'),
     path('api/remove-contact/', remove_contact, name='remove_contact'),
     path('api/search-users/', search_users, name='search_users'),
+    path('ws/', include('worksphere.routing')),
 
 ]

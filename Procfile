@@ -1,1 +1,1 @@
-web: gunicorn worksphere.wsgi --timeout 120
+web: daphne worksphere.asgi:application --port $PORT --bind 0.0.0.0 -v2

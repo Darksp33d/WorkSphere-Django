@@ -1,25 +1,14 @@
-from django.http import StreamingHttpResponse
-from django.utils.decorators import method_decorator
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view, permission_classes, renderer_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.renderers import BaseRenderer
 from django.db.models import Q
-from ..models.sphere_connect import Message, Group, GroupMessage, TypingStatus, Contact
+from ..models.sphere_connect import Message, Group, GroupMessage, Contact
 from ..models import CustomUser
 import json
-from datetime import timedelta
-from django.utils import timezone
-from django.core.cache import cache
-import time
-
-class EventStreamRenderer(BaseRenderer):
-    media_type = "text/event-stream"
-    format = "txt"
-
-    def render(self, data, accepted_media_type=None, renderer_context=None):
-        return data.encode("utf-8")
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -47,6 +36,17 @@ def send_private_message(request):
         return Response({'error': 'Recipient not found'}, status=404)
     
     message = Message.objects.create(sender=sender, recipient=recipient, content=content)
+    
+    # Send message to WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"chat_{sender.id}_{recipient.id}",
+        {
+            "type": "chat.message",
+            "message": message.to_dict()
+        }
+    )
+    
     return Response({
         'message': 'Message sent successfully',
         'message_data': message.to_dict()
@@ -148,6 +148,16 @@ def send_group_message(request):
     message = GroupMessage.objects.create(group=group, sender=request.user, content=content)
     message.read_by.add(request.user)  # Mark as read for the sender
     
+    # Send message to WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"group_{group.id}",
+        {
+            "type": "chat.message",
+            "message": message.to_dict()
+        }
+    )
+    
     return Response({
         'message': 'Message sent successfully',
         'message_data': message.to_dict()
@@ -225,64 +235,29 @@ def user_typing(request):
     contact_id = request.data.get('contact_id')
     is_typing = request.data.get('is_typing', False)
 
+    channel_layer = get_channel_layer()
     if channel_id:
-        typing_key = f"typing:channel:{channel_id}"
+        async_to_sync(channel_layer.group_send)(
+            f"group_{channel_id}",
+            {
+                "type": "typing.status",
+                "user_id": request.user.id,
+                "is_typing": is_typing
+            }
+        )
     elif contact_id:
-        typing_key = f"typing:private:{request.user.id}:{contact_id}"
+        async_to_sync(channel_layer.group_send)(
+            f"chat_{request.user.id}_{contact_id}",
+            {
+                "type": "typing.status",
+                "user_id": request.user.id,
+                "is_typing": is_typing
+            }
+        )
     else:
         return Response({'error': 'Either channel_id or contact_id is required'}, status=400)
 
-    typing_users = cache.get(typing_key, {})
-    if is_typing:
-        typing_users[str(request.user.id)] = timezone.now().timestamp()
-    else:
-        typing_users.pop(str(request.user.id), None)
-    cache.set(typing_key, typing_users, timeout=None)
-
     return Response({'status': 'ok'})
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-@renderer_classes([EventStreamRenderer])
-def events(request):
-    channel_id = request.GET.get('channel')
-    contact_id = request.GET.get('contact')
-
-    def event_stream():
-        last_id = 0
-        while True:
-            new_messages = []
-            if channel_id:
-                new_messages = GroupMessage.objects.filter(group_id=channel_id, id__gt=last_id).order_by('id')
-                typing_key = f"typing:channel:{channel_id}"
-            elif contact_id:
-                new_messages = Message.objects.filter(
-                    (Q(sender_id=request.user.id) & Q(recipient_id=contact_id)) |
-                    (Q(sender_id=contact_id) & Q(recipient_id=request.user.id)),
-                    id__gt=last_id
-                ).order_by('id')
-                typing_key = f"typing:private:{request.user.id}:{contact_id}"
-            
-            for message in new_messages:
-                last_id = message.id
-                yield f"data: {json.dumps({'type': 'new_message', 'message': message.to_dict()})}\n\n"
-            
-            if typing_key:
-                typing_users = cache.get(typing_key, {})
-                for user_id, timestamp in list(typing_users.items()):
-                    if timezone.now().timestamp() - timestamp > 5:
-                        del typing_users[user_id]
-                    else:
-                        yield f"data: {json.dumps({'type': 'typing_status', 'user_id': user_id, 'is_typing': True})}\n\n"
-                cache.set(typing_key, typing_users, timeout=None)
-            
-            yield ": keepalive\n\n"
-            time.sleep(0.5)  # Reduce the sleep time for more responsiveness
-
-    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
