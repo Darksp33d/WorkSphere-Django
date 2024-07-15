@@ -46,6 +46,6 @@ urlpatterns = [
     path('api/add-contact/', add_contact, name='add_contact'),
     path('api/remove-contact/', remove_contact, name='remove_contact'),
     path('api/search-users/', search_users, name='search_users'),
-    path('ws/', include('worksphere.routing')),
+    # path('ws/', include('worksphere.routing')),
 
 ]
