@@ -1,19 +1,21 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models.sphere_connect import Message, GroupMessage
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'chat_{self.room_name}'
 
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
-
-        await self.accept()
+        # Check authentication
+        if self.scope["user"].is_anonymous:
+            await self.close()
+        else:
+            await self.channel_layer.group_add(
+                self.room_group_name,
+                self.channel_name
+            )
+            await self.accept()
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
@@ -27,6 +29,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if message_type == 'chat.message':
             message = text_data_json['message']
+            await self.save_message(message)
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -61,3 +64,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'user_id': user_id,
             'is_typing': is_typing
         }))
+
+    @database_sync_to_async
+    def save_message(self, message):
+        from .models.sphere_connect import Message, GroupMessage
+        # Implement your message saving logic here
+        # This is just a placeholder, adjust according to your model structure
+        Message.objects.create(content=message['content'], sender_id=message['sender_id'])
