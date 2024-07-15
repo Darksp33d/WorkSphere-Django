@@ -56,7 +56,6 @@ TEMPLATES = [
     },
 ]
 
-
 ASGI_APPLICATION = 'worksphere.asgi.application'
 
 CHANNEL_LAYERS = {
