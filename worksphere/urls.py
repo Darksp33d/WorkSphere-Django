@@ -40,7 +40,6 @@ urlpatterns = [
     path('api/add-user-to-channel/', add_user_to_channel, name='add_user_to_channel'),
     path('api/remove-user-from-channel/', remove_user_from_channel, name='remove_user_from_channel'),
     path('api/user-typing/', user_typing, name='user_typing'),
-    path('api/events/', events, name='events'),
     path('api/get-recent-messages/', get_recent_messages, name='get_recent_messages'),
     path('api/get-unread-sphereconnect-messages/', get_unread_sphereconnect_messages, name='get_unread_sphereconnect_messages'),
     path('api/mark-sphereconnect-message-read/', mark_sphereconnect_message_read, name='mark_sphereconnect_message_read'),
