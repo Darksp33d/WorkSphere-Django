@@ -1,6 +1,10 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from .models.sphere_connect import Message, GroupMessage, Group
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -29,7 +33,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         if message_type == 'chat.message':
             message = text_data_json['message']
-            await self.save_message(message)
+            if 'group_id' in text_data_json:
+                await self.save_group_message(text_data_json['group_id'], message)
+            else:
+                await self.save_private_message(text_data_json['recipient_id'], message)
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -66,8 +73,21 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def save_message(self, message):
-        from .models.sphere_connect import Message, GroupMessage
-        # Implement your message saving logic here
-        # This is just a placeholder, adjust according to your model structure
-        Message.objects.create(content=message['content'], sender_id=message['sender_id'])
+    def save_group_message(self, group_id, message):
+        group = Group.objects.get(id=group_id)
+        sender = User.objects.get(first_name=message['sender'])
+        GroupMessage.objects.create(
+            group=group,
+            sender=sender,
+            content=message['content']
+        )
+
+    @database_sync_to_async
+    def save_private_message(self, recipient_id, message):
+        sender = User.objects.get(first_name=message['sender'])
+        recipient = User.objects.get(id=recipient_id)
+        Message.objects.create(
+            sender=sender,
+            recipient=recipient,
+            content=message['content']
+        )
